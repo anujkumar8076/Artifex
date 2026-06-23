@@ -121,14 +121,32 @@ key (`OPENAI_API_KEY` or `REPLICATE_API_TOKEN`) as environment variables.
 Generation runs in a Node serverless route (`runtime = "nodejs"`); with no key
 set, the deployment still works in demo mode.
 
+## 🔐 Accounts, persistence & billing
+
+All optional and **off by default** — the app runs in demo mode with none of it.
+Turn each on independently via env vars (see [.env.example](.env.example)):
+
+- **Accounts (Auth.js + GitHub):** set `AUTH_SECRET` + a GitHub OAuth app
+  (`AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`). A "Sign in" button appears; JWT sessions.
+- **Persistence (Supabase):** run [`supabase/schema.sql`](supabase/schema.sql) in your
+  Supabase project, then set `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+  Tables: `profiles` (credits), `projects`, `assets`.
+- **Billing (Stripe):** set `STRIPE_SECRET_KEY`, create three one-time Prices and paste
+  their ids (`STRIPE_PRICE_STARTER/PRO/STUDIO`), and add a webhook for
+  `checkout.session.completed` (`STRIPE_WEBHOOK_SECRET`). The "Buy credits" modal then
+  runs real Stripe Checkout and the webhook grants credits.
+
+Each layer degrades safely: missing keys → the related endpoint returns a clear
+501/401 instead of crashing.
+
 ## 🗺️ Roadmap (good first contributions)
 
 - [ ] Real image→3D (GLB) provider wired through `generate3D`
 - [ ] Async job queue + webhooks for long renders
-- [ ] Auth + per-user projects (the store is already project-scoped)
+- [x] Auth (Auth.js + GitHub) + Stripe credit billing — _scaffolded_
+- [ ] Sync the studio store to Supabase `projects`/`assets` (server fns ready in `lib/db.ts`)
 - [ ] Roblox Studio companion plugin (Open Cloud) for true one-click push
 - [ ] Sprite-sheet / 9-slice / texture-atlas post-processors
-- [ ] Credits + billing (Stripe) for the hosted edition
 
 ## 🤝 Open source & licensing
 

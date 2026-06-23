@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { CreditPack } from "./billing/packs";
 import {
   ASSET_TYPE_MAP,
   DEFAULT_PALETTE,
@@ -92,8 +93,16 @@ interface StudioState {
   credits: number;
   selectedAssetId: string | null;
 
+  // account / billing
+  user: { email?: string | null; name?: string | null; image?: string | null } | null;
+  authEnabled: boolean;
+  stripeEnabled: boolean;
+  supabaseEnabled: boolean;
+  packs: CreditPack[];
+
   // actions
   loadProvider: () => Promise<void>;
+  loadAccount: () => Promise<void>;
   setPrompt: (v: string) => void;
   setAssetType: (t: AssetTypeId) => void;
   togglePlatform: (p: PlatformId) => void;
@@ -132,6 +141,12 @@ export const useStudio = create<StudioState>((set, get) => ({
   credits: 2480,
   selectedAssetId: null,
 
+  user: null,
+  authEnabled: false,
+  stripeEnabled: false,
+  supabaseEnabled: false,
+  packs: [],
+
   loadProvider: async () => {
     try {
       const res = await fetch("/api/generate");
@@ -139,6 +154,30 @@ export const useStudio = create<StudioState>((set, get) => ({
         const d = (await res.json()) as { provider?: string };
         if (d.provider) set({ configuredProvider: d.provider });
       }
+    } catch {
+      /* non-fatal */
+    }
+  },
+  loadAccount: async () => {
+    try {
+      const res = await fetch("/api/account");
+      if (!res.ok) return;
+      const d = (await res.json()) as {
+        authEnabled?: boolean;
+        stripeEnabled?: boolean;
+        supabaseEnabled?: boolean;
+        packs?: CreditPack[];
+        user?: StudioState["user"];
+        credits?: number | null;
+      };
+      set({
+        authEnabled: !!d.authEnabled,
+        stripeEnabled: !!d.stripeEnabled,
+        supabaseEnabled: !!d.supabaseEnabled,
+        packs: d.packs ?? [],
+        user: d.user ?? null,
+        ...(typeof d.credits === "number" ? { credits: d.credits } : {}),
+      });
     } catch {
       /* non-fatal */
     }

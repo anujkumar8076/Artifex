@@ -17,10 +17,18 @@ export default function StudioPage() {
   const clearError = useStudio((s) => s.clearError);
   const selectAsset = useStudio((s) => s.selectAsset);
   const loadProvider = useStudio((s) => s.loadProvider);
+  const loadAccount = useStudio((s) => s.loadAccount);
 
   useEffect(() => {
     void loadProvider();
-  }, [loadProvider]);
+    void loadAccount();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("purchase") === "success") {
+      setInfo("Payment received — your credits have been added.");
+    } else if (params.get("purchase") === "cancel") {
+      setInfo("Checkout canceled — no charge was made.");
+    }
+  }, [loadProvider, loadAccount]);
 
   const focusComposer = useCallback(() => {
     document.getElementById("composer-input")?.focus();
