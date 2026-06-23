@@ -64,6 +64,26 @@ function costFor(type: AssetTypeId, batch: number): number {
   return per * batch;
 }
 
+/** Map a Supabase asset row back into the client GeneratedAsset shape. */
+function rowToAsset(r: Record<string, any>): GeneratedAsset {
+  return {
+    id: String(r.id),
+    title: r.title ?? "Asset",
+    type: r.type,
+    platforms: Array.isArray(r.platforms) ? r.platforms : [],
+    format: r.format ?? "PNG",
+    imageUrl: r.image_url,
+    fileUrl: r.file_url ?? undefined,
+    prompt: r.prompt ?? "",
+    provider: r.provider ?? "",
+    createdAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
+    status: "done",
+    width: r.width ?? 0,
+    height: r.height ?? 0,
+    meta: r.meta ?? {},
+  };
+}
+
 const SEED: GeneratedAsset[] = [
   seedAsset("Frost dragon boss", "character", ["roblox"], 9000),
   seedAsset("Dragon health bar", "hud", ["roblox"], 8000),
@@ -99,17 +119,19 @@ interface StudioState {
   stripeEnabled: boolean;
   supabaseEnabled: boolean;
   packs: CreditPack[];
+  cloudLoaded: boolean;
 
   // actions
   loadProvider: () => Promise<void>;
   loadAccount: () => Promise<void>;
+  loadCloud: () => Promise<void>;
   setPrompt: (v: string) => void;
   setAssetType: (t: AssetTypeId) => void;
   togglePlatform: (p: PlatformId) => void;
   toggleStyleLock: () => void;
   setBatch: (n: number) => void;
   setActiveProject: (id: string) => void;
-  newProject: (name?: string) => void;
+  newProject: (name?: string) => Promise<void>;
   selectAsset: (id: string | null) => void;
   removeAsset: (id: string) => void;
   clearError: () => void;
@@ -146,6 +168,7 @@ export const useStudio = create<StudioState>((set, get) => ({
   stripeEnabled: false,
   supabaseEnabled: false,
   packs: [],
+  cloudLoaded: false,
 
   loadProvider: async () => {
     try {
@@ -182,6 +205,50 @@ export const useStudio = create<StudioState>((set, get) => ({
       /* non-fatal */
     }
   },
+  loadCloud: async () => {
+    const s = get();
+    if (!(s.user && s.supabaseEnabled) || s.cloudLoaded) return;
+    try {
+      const res = await fetch("/api/projects");
+      if (!res.ok) return;
+      const d = (await res.json()) as {
+        synced?: boolean;
+        projects?: Array<Record<string, any>>;
+        assets?: Array<Record<string, any>>;
+      };
+      if (!d.synced) return;
+
+      const projects: Project[] = (d.projects ?? []).map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        color: p.color || "#7C5CFF",
+      }));
+
+      if (projects.length === 0) {
+        // Brand-new user — start them with one cloud project.
+        set({ cloudLoaded: true });
+        await get().newProject("My assets");
+        return;
+      }
+
+      const assetsByProject: Record<string, GeneratedAsset[]> = {};
+      for (const p of projects) assetsByProject[p.id] = [];
+      for (const row of d.assets ?? []) {
+        const pid = String(row.project_id);
+        if (assetsByProject[pid]) assetsByProject[pid].push(rowToAsset(row));
+      }
+
+      set({
+        projects,
+        assetsByProject,
+        activeProjectId: projects[0].id,
+        cloudLoaded: true,
+        selectedAssetId: null,
+      });
+    } catch {
+      /* non-fatal — stay in local mode */
+    }
+  },
   setPrompt: (v) => set({ prompt: v }),
   setAssetType: (t) => set({ assetType: t }),
   togglePlatform: (p) =>
@@ -195,21 +262,39 @@ export const useStudio = create<StudioState>((set, get) => ({
   setBatch: (n) => set({ batch: Math.max(1, Math.min(8, n)) }),
 
   setActiveProject: (id) => set({ activeProjectId: id, selectedAssetId: null }),
-  newProject: (name) =>
-    set((s) => {
-      const id = uid("p");
-      const project: Project = {
-        id,
-        name: name?.trim() || `Untitled project ${s.projects.length + 1}`,
-        color: "#7C5CFF",
-      };
-      return {
-        projects: [project, ...s.projects],
-        activeProjectId: id,
-        assetsByProject: { ...s.assetsByProject, [id]: [] },
-        selectedAssetId: null,
-      };
-    }),
+  newProject: async (name) => {
+    const s = get();
+    let id = uid("p");
+    let pname = name?.trim() || `Untitled project ${s.projects.length + 1}`;
+    let color = "#7C5CFF";
+
+    if (s.user && s.supabaseEnabled) {
+      try {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: pname, color }),
+        });
+        if (res.ok) {
+          const d = (await res.json()) as { project?: { id: string; name: string; color: string } };
+          if (d.project?.id) {
+            id = String(d.project.id);
+            pname = d.project.name ?? pname;
+            color = d.project.color ?? color;
+          }
+        }
+      } catch {
+        /* fall back to a local project */
+      }
+    }
+
+    set((st) => ({
+      projects: [{ id, name: pname, color }, ...st.projects],
+      activeProjectId: id,
+      assetsByProject: { ...st.assetsByProject, [id]: [] },
+      selectedAssetId: null,
+    }));
+  },
   selectAsset: (id) => set({ selectedAssetId: id }),
   removeAsset: (id) =>
     set((s) => {
@@ -266,6 +351,16 @@ export const useStudio = create<StudioState>((set, get) => ({
           credits: Math.max(0, st.credits - cost),
         };
       });
+
+      // Persist to Supabase when signed in (fire-and-forget).
+      const after = get();
+      if (after.user && after.supabaseEnabled) {
+        void fetch("/api/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: after.activeProjectId, assets: data.assets }),
+        }).catch(() => {});
+      }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Something went wrong." });
     } finally {

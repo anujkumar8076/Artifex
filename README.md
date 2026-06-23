@@ -144,7 +144,7 @@ Each layer degrades safely: missing keys → the related endpoint returns a clea
 - [ ] Real image→3D (GLB) provider wired through `generate3D`
 - [ ] Async job queue + webhooks for long renders
 - [x] Auth (Auth.js + GitHub) + Stripe credit billing — _scaffolded_
-- [ ] Sync the studio store to Supabase `projects`/`assets` (server fns ready in `lib/db.ts`)
+- [x] Sync the studio store to Supabase `projects`/`assets` — _wired (activates with Supabase keys)_
 - [ ] Roblox Studio companion plugin (Open Cloud) for true one-click push
 - [ ] Sprite-sheet / 9-slice / texture-atlas post-processors
 

@@ -27,6 +27,7 @@ create table if not exists assets (
   file_url text,
   prompt text,
   provider text,
+  platforms text[] default '{}',
   width integer,
   height integer,
   meta jsonb default '{}'::jsonb,

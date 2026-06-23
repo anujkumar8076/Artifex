@@ -56,6 +56,17 @@ export async function listProjects(email: string) {
   return data ?? [];
 }
 
+export async function listAssets(email: string) {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data } = await sb
+    .from("assets")
+    .select("*")
+    .eq("user_email", email)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
 export async function createProject(email: string, name: string, color: string) {
   const sb = getSupabase();
   if (!sb) return null;
@@ -81,6 +92,7 @@ export async function saveAssets(email: string, projectId: string, assets: Gener
     file_url: a.fileUrl ?? null,
     prompt: a.prompt,
     provider: a.provider,
+    platforms: a.platforms,
     width: a.width,
     height: a.height,
     meta: a.meta ?? {},

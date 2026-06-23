@@ -18,17 +18,21 @@ export default function StudioPage() {
   const selectAsset = useStudio((s) => s.selectAsset);
   const loadProvider = useStudio((s) => s.loadProvider);
   const loadAccount = useStudio((s) => s.loadAccount);
+  const loadCloud = useStudio((s) => s.loadCloud);
 
   useEffect(() => {
     void loadProvider();
-    void loadAccount();
+    void (async () => {
+      await loadAccount();
+      await loadCloud();
+    })();
     const params = new URLSearchParams(window.location.search);
     if (params.get("purchase") === "success") {
       setInfo("Payment received — your credits have been added.");
     } else if (params.get("purchase") === "cancel") {
       setInfo("Checkout canceled — no charge was made.");
     }
-  }, [loadProvider, loadAccount]);
+  }, [loadProvider, loadAccount, loadCloud]);
 
   const focusComposer = useCallback(() => {
     document.getElementById("composer-input")?.focus();
